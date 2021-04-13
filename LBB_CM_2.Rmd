@@ -1,0 +1,158 @@
+---
+title: "Loan Customers Classification"
+author: "Amalia Purieka"
+date: "2/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+The telemarketing team on a particular bank is trying to reach out to the right loan customers. As data scientists, we will help them by classifying the customers based on their willingness to take the loan or not. We are going to utilizing machine learning classification. We need model with accuracy above 75%.
+
+## Import Library
+
+```{r}
+library(dplyr)
+library(grid)
+library(gtools)
+library(e1071)
+library(tm)
+library(SnowballC)
+library(ROCR)
+library(partykit)
+library(caret)
+library(class)
+library(gmodels)
+```
+
+## Load Data
+
+We load the prepared data from 'data_input" folder
+```{r}
+bank <- read.csv("data_input/bank.csv", sep = ";", stringsAsFactors = T)
+glimpse(bank)
+```
+
+
+## Exploratory Data Analysis
+
+```{r}
+summary(bank)
+```
+
+Check Missing Value
+```{r}
+colSums(is.na(bank))
+```
+
+Check levels of target variable
+```{r}
+levels(bank$y)
+```
+
+Cross Validation
+```{r}
+RNGkind(sample.kind = "Rounding")
+set.seed(100)
+
+# train-test splitting
+indexbank <- sample(nrow(bank), nrow(bank) * 0.75)
+bank_train <- bank[indexbank,] # training = 75%
+bank_test <- bank[-indexbank,] # testing = 25%
+```
+
+Check target variable proportion
+```{r}
+prop.table(table(bank_train$y))
+```
+
+```{r}
+prop.table(table(bank_test$y))
+```
+
+From all the data above, we can observe that more than 80% do not have deposits at the bank from the two datasets.
+We need to balance the proportion to train the model correctly. In this case, we use 'upSample' function as the amount of our data is still considered to be minimum.
+```{r}
+set.seed(123)
+bank_train_up <- upSample(x = bank_train %>% select(-y),
+                          y = bank_train$y,
+                          list = F,
+                          yname = "y") 
+
+table(bank_train_up$y)
+prop.table(table(bank_train_up$y))
+```
+Now that our data is balance, let's fitting the model
+
+## Naive Bayes Model
+
+Fitting Model
+```{r}
+# train
+loan_nb <- naiveBayes(x = bank_train_up %>% select(-y), # predictor
+                          y = bank_train_up$y) # target
+```
+
+```{r}
+loan_nb$tables$balance
+```
+
+Predict the class using predict() function
+```{r}
+loan_pred_nb <- predict(object = loan_nb, newdata = bank_test, type = "class")
+head(loan_pred_nb)
+```
+
+Model Evaluation
+```{r}
+# Positive = YES
+# confusion matrix
+confusionMatrix(data = loan_pred_nb, # prediction label
+                reference = bank_test$y, # actual label
+                positive = "yes")
+```
+
+```{r}
+# Positive = NO
+confusionMatrix(data = loan_pred_nb, # prediction label
+                reference = bank_test$y, # actual label
+                positive = "no")
+```
+
+Both of the two class is generate the same matrix. The accuracy from this model can be used by telemarketing team to reach the customers.
+
+## Decision Tree Model
+
+Fitting model
+```{r}
+model_dt <- ctree(y~., bank_train_up)
+```
+
+Visualize the model
+```{r}
+plot(model_dt, type="simple")
+```
+
+Model Evaluation
+
+```{r}
+# prediction in data test
+pred_loan_test <- predict(object = model_dt, 
+                          newdata = bank_test,
+                          type = "response")
+
+# confusion matrix data test
+confusionMatrix(data = pred_loan_test,
+                reference = bank_test$y,
+                positive = "no")
+```
+
+We can generate 80.9% accuracy with the above decision tree model. False-negative is lower than false positive. In this case, we would like to get true-positive as much as we can and expect false-negative with minimum numbers. This model also gives a value of 82.12% in sensitivity as the matrix evaluation that will be fit to our case.
+
+## Summary
+Having observed both of the models, Decision Tree has higher accuracy (81%) and sensitivity (82%). 'model_dt' is a better model that could overcome our business needs for classifying the list of loan customers. Hopefully, telemarketing can utilize this model for reaching the right loan customers and improve the sales value.
+
